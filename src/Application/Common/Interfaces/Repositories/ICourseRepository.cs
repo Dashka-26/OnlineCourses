@@ -1,13 +1,12 @@
 ﻿using Domain.Courses;
+using LanguageExt;
 
-namespace Application.Common.Interfaces;
+namespace Application.Common.Interfaces.Repositories;
 
 public interface ICourseRepository
 {
-    Task<IReadOnlyList<Course>> GetAll(CancellationToken cancellationToken);
-    Task<Course?> GetById(Guid id, CancellationToken cancellationToken);
-    
-    Task<Course?> GetByTitle(string title, CancellationToken cancellationToken);
+    Task<Option<Course>> GetById(CourseId id, CancellationToken cancellationToken);
+    Task<Option<Course>> GetByTitle(string title, CancellationToken cancellationToken);
     
     Task<Course> Add(Course course, CancellationToken cancellationToken);
     Task<Course> Update(Course course, CancellationToken cancellationToken);

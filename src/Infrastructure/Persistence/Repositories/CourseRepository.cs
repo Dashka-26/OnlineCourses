@@ -1,24 +1,28 @@
-﻿using Application.Common.Interfaces;
+﻿using Application.Common.Interfaces.Queries;
+using Application.Common.Interfaces.Repositories;
 using Domain.Courses;
+using LanguageExt;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence.Repositories;
 
-public class CourseRepository(ApplicationDbContext context) : ICourseRepository
+public class CourseRepository(ApplicationDbContext context) : ICourseRepository, ICourseQueries
 {
     public async Task<IReadOnlyList<Course>> GetAll(CancellationToken cancellationToken)
     {
-        return await context.Courses.ToListAsync(cancellationToken);
+        return await context.Courses.AsNoTracking().ToListAsync(cancellationToken);
     }
 
-    public async Task<Course?> GetById(Guid id, CancellationToken cancellationToken)
+    public async Task<Option<Course>> GetById(CourseId id, CancellationToken cancellationToken)
     {
-        return await context.Courses.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var entity = await context.Courses.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        return entity ?? Option<Course>.None;
     }
 
-    public async Task<Course?> GetByTitle(string title, CancellationToken cancellationToken)
+    public async Task<Option<Course>> GetByTitle(string title, CancellationToken cancellationToken)
     {
-        return await context.Courses.FirstOrDefaultAsync(x => x.Title == title, cancellationToken);
+        var entity = await context.Courses.FirstOrDefaultAsync(x => x.Title == title, cancellationToken);
+        return entity ?? Option<Course>.None; 
     }
 
     public async Task<Course> Add(Course course, CancellationToken cancellationToken)

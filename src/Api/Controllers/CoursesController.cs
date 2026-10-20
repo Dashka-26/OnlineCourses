@@ -1,29 +1,32 @@
 ﻿using Api.Dtos;
-using Application.Courses.Services.Abstract;
+using Api.Modules.Errors;
+using Application.Common.Interfaces.Queries;
+using Application.Courses.Commands;
+using Domain.Courses;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Api.Controllers;
 
 [Route("courses")]
 [ApiController]
-public class CoursesController(ICourseService courseService) : ControllerBase
+public class CoursesController(ISender sender, ICourseQueries courseQueries) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<CourseDto>>> GetCourses(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<CourseDto>>> GetCourses(CancellationToken cancellationToken)
     {
-        var courses = await courseService.GetCourses(cancellationToken);
-        return Ok(courses.Select(CourseDto.FromDomainModel));
+        var courses = await courseQueries.GetAll(cancellationToken);
+        return Ok(courses.Select(CourseDto.FromDomainModel).ToList());
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<CourseDto>> GetCourse(Guid id, CancellationToken cancellationToken)
     {
-        var course = await courseService.GetCourse(id, cancellationToken);
-        if (course is null)
-        {
-            return NotFound();
-        }
-        return CourseDto.FromDomainModel(course);
+        var courseOption = await courseQueries.GetById(new CourseId(id), cancellationToken);
+        
+        return courseOption.Match<ActionResult<CourseDto>>(
+            c => CourseDto.FromDomainModel(c),
+            () => NotFound());
     }
 
     [HttpPost]
@@ -31,17 +34,19 @@ public class CoursesController(ICourseService courseService) : ControllerBase
         [FromBody] CreateCourseDto request,
         CancellationToken cancellationToken)
     {
-        try
+        var input = new CreateCourseCommand
         {
-            var course = await courseService.Add(request.Title, request.Price, request.IsActive, request.Level, cancellationToken);
-            var dto = CourseDto.FromDomainModel(course);
-            
-            return CreatedAtAction(nameof(GetCourse), new { id = dto.Id }, dto);
-        }
-        catch (ArgumentException exception)
-        {
-            return Conflict(exception.Message);
-        }
+            Title = request.Title,
+            Price = request.Price,
+            IsActive = request.IsActive,
+            Level = request.Level
+        };
+
+        var result = await sender.Send(input, cancellationToken);
+
+        return result.Match<ActionResult<CourseDto>>(
+            c => CreatedAtAction(nameof(GetCourse), new { id = c.Id.Value }, CourseDto.FromDomainModel(c)),
+            e => e.ToObjectResult());
     }
 
     [HttpPut("{id:guid}")]
@@ -50,30 +55,30 @@ public class CoursesController(ICourseService courseService) : ControllerBase
         [FromBody] UpdateCourseDto request,
         CancellationToken cancellationToken)
     {
-        try
+        var input = new UpdateCourseCommand
         {
-            var course = await courseService.Update(id, request.Title, request.Price, request.IsActive, request.Level, cancellationToken);
-            if (course is null)
-            {
-                return NotFound();
-            }
-            return Ok(CourseDto.FromDomainModel(course));
-        }
-        catch (ArgumentException exception)
-        {
-            return Conflict(exception.Message);
-        }
+            CourseId = id,
+            Title = request.Title,
+            Price = request.Price,
+            IsActive = request.IsActive,
+            Level = request.Level
+        };
+
+        var result = await sender.Send(input, cancellationToken);
+
+        return result.Match<ActionResult<CourseDto>>(
+            c => Ok(CourseDto.FromDomainModel(c)),
+            e => e.ToObjectResult());
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteCourse(Guid id, CancellationToken cancellationToken)
     {
-        var deleted = await courseService.Delete(id, cancellationToken);
-        if (!deleted)
-        {
-            return NotFound();
-        }
-        
-        return NoContent(); 
+        var input = new DeleteCourseCommand { CourseId = id };
+        var result = await sender.Send(input, cancellationToken);
+
+        return result.Match<IActionResult>(
+            _ => NoContent(),
+            e => e.ToObjectResult());
     }
 }
